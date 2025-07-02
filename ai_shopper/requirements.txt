@@ -1,0 +1,15 @@
+# Core AI/Agent Framework
+langchain
+# langchain-google-genai # Example if using Gemini via Langchain
+# langchain-anthropic # Example if using Claude via Langchain
+# openai # If using OpenAI models directly or via Langchain
+
+# Web Scraping
+beautifulsoup4
+requests
+
+# Web Platform
+Flask
+
+# Optional: For environment variable management if not handled by platform
+# python-dotenv

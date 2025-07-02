@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Secrets - to be managed via environment variables or a .env file (not committed)
+*.env
+secrets/
+
+# Node specific (if we use Node.js for frontend or tools)
+node_modules/
+dist/
+build/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json # If not part of the committed package management strategy
+# If using Next.js
+.next/
+out/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+
+# Drizzle ORM (if used, though this is a new project)
+# drizzle/
+
+# Compiled files
+*.o
+*.so
