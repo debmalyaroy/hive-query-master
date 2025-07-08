@@ -1,42 +1,37 @@
 # ai_shopper/platform/main.py
 
+import os
 from flask import Flask, render_template, request, jsonify
-# from ai_shopper.agent import goal_analyzer, researcher, deliberator, reporter # Eventually import agent components
+
+# Import actual agent components
+from ai_shopper.agent.goal_analyzer import GoalAnalyzer
+from ai_shopper.agent.researcher import Researcher
+from ai_shopper.agent.deliberator import Deliberator
+from ai_shopper.agent.reporter import Reporter
 
 app = Flask(__name__)
 
-# Mock agent components for now
-class MockGoalAnalyzer:
-    def decompose_goal(self, prompt):
-        return [{"original_prompt": prompt, "analysis": "Goal analysis placeholder"}]
-
-class MockResearcher:
-    def conduct_research(self, tasks):
-        return {"research_data": "Research data placeholder based on tasks"}
-
-class MockDeliberator:
-    def select_best_options(self, findings, constraints):
-        return {"selected_items": [{"name": "Mock Item 1", "price": 100}], "total_price": 100}
-
-class MockReporter:
-    def generate_report(self, selection, prompt):
-        return f"Report for '{prompt[:30]}...':\nSelected: {selection['selected_items'][0]['name']} (Price: {selection['total_price']}). More details soon."
-
-# Initialize mock agent components
-goal_analyzer_agent = MockGoalAnalyzer()
-researcher_agent = MockResearcher()
-deliberator_agent = MockDeliberator()
-reporter_agent = MockReporter()
+# Initialize actual agent components
+# Note: GoalAnalyzer will try to load OPENAI_API_KEY from .env upon instantiation
+goal_analyzer_agent = GoalAnalyzer()
+researcher_agent = Researcher() # Will use mock logic for now
+deliberator_agent = Deliberator() # Will use mock logic for now
+reporter_agent = Reporter() # Will use mock logic for now
 
 @app.route('/')
 def index():
     """Serves the main page with the input form."""
+    # Ensure the templates directory is correctly referenced if main.py is run directly
+    # For Flask, templates are typically in a 'templates' folder at the same level as the app file,
+    # or specified via template_folder argument in Flask constructor.
+    # Our current structure `ai_shopper/platform/templates/index.html` with `main.py` in `platform/`
+    # means Flask should find `templates/index.html` relative to `platform/`
     return render_template('index.html')
 
 @app.route('/process_shopping_goal', methods=['POST'])
 def process_shopping_goal():
     """
-    Receives the user's shopping goal, processes it through the agent pipeline (mocked for now),
+    Receives the user's shopping goal, processes it through the agent pipeline,
     and returns the generated report.
     """
     try:
@@ -46,98 +41,60 @@ def process_shopping_goal():
         if not user_goal:
             return jsonify({"error": "No goal provided"}), 400
 
-        # --- Mock Agent Pipeline ---
+        # --- Agent Pipeline ---
         # 1. Decompose Goal
-        # decomposed_tasks_and_constraints = goal_analyzer_agent.decompose_goal(user_goal)
+        app.logger.info(f"Received goal: {user_goal}. Starting GoalAnalyzer...")
+        decomposed_output = goal_analyzer_agent.decompose_goal(user_goal)
+        app.logger.info(f"GoalAnalyzer output: {decomposed_output}")
 
-        # 2. Conduct Research
-        # research_findings = researcher_agent.conduct_research(decomposed_tasks_and_constraints)
+        if decomposed_output.get("error"):
+            app.logger.error(f"GoalAnalyzer error: {decomposed_output['error']}")
+            return jsonify({"error": f"Goal Analysis Failed: {decomposed_output['error']}"}), 500
 
-        # 3. Deliberate and Select Options
-        # constraints = [t for t in decomposed_tasks_and_constraints if "constraint" in t.get("task_type", "")]
-        # final_selection = deliberator_agent.select_best_options(research_findings, constraints)
+        # Extract relevant parts for the next steps
+        # Based on the structure defined in GoalAnalyzer's system prompt
+        product_categories_to_find = decomposed_output.get("product_categories_to_find", [])
+        # search_queries = decomposed_output.get("search_queries", []) # May not be directly used by mock researcher
+        constraints = decomposed_output.get("constraints", {})
 
-        # For this basic outline, we'll just pass the goal to a mock reporter
-        # This simulates the end-to-end flow very simply.
-        # In reality, the full pipeline (goal_analyzer, researcher, deliberator) would run.
+        # 2. Conduct Research (using conceptual/mock Researcher for this phase)
+        app.logger.info(f"Starting Researcher with categories: {product_categories_to_find}")
+        # The researcher's `conduct_research` needs to be adapted to take structured input
+        # For now, let's assume it takes product_categories_to_find
+        research_tasks_for_researcher = [{"task_type": "find_product_category", "category_info": cat} for cat in product_categories_to_find]
+        research_findings = researcher_agent.conduct_research(research_tasks_for_researcher)
+        app.logger.info(f"Researcher output: {research_findings}")
 
-        # Simplified mock flow for now:
-        mock_selection = {"selected_items": [{"name": "Mock Product A", "price": 120, "details": "A great mock product"}], "total_price": 120}
-        report_text = reporter_agent.generate_report(mock_selection, user_goal)
+        # 3. Deliberate and Select Options (using conceptual/mock Deliberator)
+        app.logger.info(f"Starting Deliberator with findings and constraints: {constraints}")
+        # The deliberator's `select_best_options` needs research_findings and constraints
+        # The constraints from GoalAnalyzer might need to be transformed or directly used
+        final_selection = deliberator_agent.select_best_options(research_findings, [constraints] if constraints else []) # Pass constraints as a list
+        app.logger.info(f"Deliberator output: {final_selection}")
+
+        # 4. Generate Report
+        app.logger.info("Starting Reporter...")
+        report_text = reporter_agent.generate_report(final_selection, user_goal)
+        app.logger.info(f"Reporter output: {report_text}")
 
         return jsonify({"report": report_text})
 
     except Exception as e:
-        app.logger.error(f"Error processing shopping goal: {e}")
-        return jsonify({"error": "An internal error occurred."}), 500
+        app.logger.error(f"Unhandled error in /process_shopping_goal: {e}", exc_info=True)
+        return jsonify({"error": "An critical internal server error occurred."}), 500
 
 if __name__ == '__main__':
-    # Create a templates directory for index.html if it doesn't exist
-    import os
-    if not os.path.exists('ai_shopper/platform/templates'):
-        os.makedirs('ai_shopper/platform/templates')
+    # This check for templates/index.html is good for local dev if file is missing.
+    # In a containerized/deployed env, file should be present.
+    template_dir = os.path.join(os.path.dirname(__file__), 'templates')
+    index_html_path = os.path.join(template_dir, 'index.html')
 
-    # Create a dummy index.html for the flask app to run
-    # This would normally be a separate file.
-    # For simplicity in this step, creating it here.
-    # In a later step, this would be a proper `create_file_with_block` for `ai_shopper/platform/templates/index.html`
-    if not os.path.exists('ai_shopper/platform/templates/index.html'):
-        with open('ai_shopper/platform/templates/index.html', 'w') as f:
-            f.write("""
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Shopper</title>
-    <style>
-        body { font-family: sans-serif; margin: 20px; background-color: #f4f4f4; }
-        .container { background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
-        textarea { width: 98%; padding: 10px; margin-bottom: 10px; border-radius: 4px; border: 1px solid #ddd; }
-        button { padding: 10px 15px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
-        button:hover { background-color: #0056b3; }
-        #reportArea { margin-top: 20px; padding: 15px; background-color: #e9ecef; border-radius: 4px; white-space: pre-wrap; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>AI Shopping Agent</h1>
-        <p>Describe your shopping goal below (e.g., "I need hiking gear for a 5-day trip to the Himalayas, budget 40000 INR, prefer sustainable brands.")</p>
-        <textarea id="shoppingGoal" rows="5" placeholder="Enter your shopping goal here..."></textarea>
-        <button onclick="submitGoal()">Get Shopping Plan</button>
-        <h2>Report:</h2>
-        <div id="reportArea">Your shopping plan will appear here...</div>
-    </div>
+    if not os.path.exists(index_html_path):
+        os.makedirs(template_dir, exist_ok=True)
+        # A very minimal index.html if it's missing, just to allow app to run.
+        # The one from `create_file_with_block` in previous steps is more complete.
+        with open(index_html_path, 'w') as f:
+            f.write("<h1>AI Shopper (Minimal Fallback)</h1><p>If you see this, the main index.html was missing.</p>")
+        app.logger.warning(f"Created minimal fallback index.html at {index_html_path}")
 
-    <script>
-        async function submitGoal() {
-            const goal = document.getElementById('shoppingGoal').value;
-            const reportArea = document.getElementById('reportArea');
-            reportArea.textContent = 'Processing your request...';
-
-            try {
-                const response = await fetch('/process_shopping_goal', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ goal: goal }),
-                });
-                const result = await response.json();
-                if (response.ok) {
-                    reportArea.textContent = result.report;
-                } else {
-                    reportArea.textContent = 'Error: ' + (result.error || 'Failed to get report.');
-                }
-            } catch (error) {
-                reportArea.textContent = 'Network error or server issue: ' + error.message;
-            }
-        }
-    </script>
-</body>
-</html>
-            """)
-
-    app.run(debug=True, port=5001) # Using a different port in case 5000 is common
-    # Note: The Flask app includes creation of 'templates/index.html' if not present.
-    # This is for demonstration; ideally, index.html would be created separately.
+    app.run(debug=True, port=5001)
